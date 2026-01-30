@@ -12,12 +12,15 @@ import Permisos from "./pages/Permisos";
 import Vacaciones from "./pages/Vacaciones";
 import Reportes from "./pages/Reportes";
 import Configuracion from "./pages/Configuracion";
+import Login from "./pages/Login";
 
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<MainLayout />}>
-        <Route index element={<Dashboard />} />
+      <Route path="/" element={<Login/>} index/>
+
+      <Route  element={<MainLayout />}>
+        <Route path="/inicio" element={<Dashboard />} />
 
         <Route path="empleados" element={<Empleados />} />
         <Route path="renglones" element={<Renglones />} />
@@ -32,7 +35,9 @@ function App() {
         {/* Si no encuentra ruta, manda al dashboard */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
+      
     </Routes>
+    
   );
 }
 
