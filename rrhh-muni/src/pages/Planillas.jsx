@@ -50,6 +50,15 @@ function Planillas() {
   const [loadingCalcular, setLoadingCalcular] = useState(false);
   const [loadingInicial, setLoadingInicial] = useState(false);
 
+  // Paginación (detalle empleados)
+  const [pagina, setPagina] = useState(1);
+  const filasPorPagina = 20;
+
+  // Resetear página cuando cambia la planilla
+  useEffect(() => {
+    setPagina(1);
+  }, [ultimaPlanilla]);
+
   // ============================
   // Carga inicial
   // ============================
@@ -117,8 +126,8 @@ function Planillas() {
     };
 
     const baseConceptos = {
-      bonos: {},       // { nombreBono: totalMonto }
-      descuentos: {},  // { nombreDesc: totalMonto }
+      bonos: {},
+      descuentos: {},
     };
 
     if (!ultimaPlanilla?.detalle) {
@@ -148,14 +157,12 @@ function Planillas() {
       t.bruto += salarioBruto;
       t.liquido += salarioNeto;
 
-      // Totales por bono
       (row.bonos || []).forEach((b) => {
         const nombre = b.nombre;
         const monto = Number(b.monto || 0);
         c.bonos[nombre] = (c.bonos[nombre] || 0) + monto;
       });
 
-      // Totales por descuento
       (row.descuentos || []).forEach((d) => {
         const nombre = d.nombre;
         const monto = Number(d.monto || 0);
@@ -225,8 +232,7 @@ function Planillas() {
         total_empleados: data.header.total_empleados,
         total_monto: data.header.total_monto,
         estado: data.header.estado,
-        // cada item YA trae bonos[] y descuentos[]
-        detalle: data.detalle,
+        detalle: data.detalle, // ya trae bonos[] y descuentos[]
       });
     } catch (error) {
       console.error("Error al ver detalle de planilla:", error);
@@ -253,6 +259,26 @@ function Planillas() {
   for (let y = 2020; y <= 2035; y++) {
     anios.push(y);
   }
+
+  // ============================
+  // Datos de paginación
+  // ============================
+  const detalleCompleto = ultimaPlanilla?.detalle || [];
+  const totalFilas = detalleCompleto.length;
+  const totalPaginas = Math.max(1, Math.ceil(totalFilas / filasPorPagina));
+  const indiceInicio = (pagina - 1) * filasPorPagina;
+  const detallePagina = detalleCompleto.slice(
+    indiceInicio,
+    indiceInicio + filasPorPagina
+  );
+
+  const handlePaginaAnterior = () => {
+    setPagina((p) => Math.max(1, p - 1));
+  };
+
+  const handlePaginaSiguiente = () => {
+    setPagina((p) => Math.min(totalPaginas, p + 1));
+  };
 
   // ============================
   // Render
@@ -417,7 +443,11 @@ function Planillas() {
               </div>
             </div>
 
-            <div className="empleados-table-card planilla-detalle-table">
+            {/* 🔹 Scroll horizontal */}
+            <div
+              className="empleados-table-card planilla-detalle-table"
+              style={{ overflowX: "auto" }}
+            >
               <table className="empleados-table">
                 <thead>
                   <tr>
@@ -442,7 +472,7 @@ function Planillas() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ultimaPlanilla.detalle.map((row) => {
+                  {detallePagina.map((row) => {
                     const bonos = Array.isArray(row.bonos) ? row.bonos : [];
                     const descuentos = Array.isArray(row.descuentos)
                       ? row.descuentos
@@ -498,7 +528,7 @@ function Planillas() {
                     );
                   })}
 
-                  {/* Fila de TOTALES */}
+                  {/* Fila de TOTALES (totales de TODA la planilla) */}
                   <tr className="planilla-detalle-totales-row">
                     <td className="planilla-detalle-totales-label">
                       TOTALES
@@ -540,6 +570,51 @@ function Planillas() {
                 </tbody>
               </table>
             </div>
+
+            {/* 🔹 Controles de paginación */}
+            {totalFilas > filasPorPagina && (
+              <div
+                style={{
+                  marginTop: "1rem",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "0.5rem",
+                }}
+              >
+                <span className="page__subtitle">
+                  Mostrando{" "}
+                  <strong>
+                    {indiceInicio + 1}-
+                    {Math.min(indiceInicio + filasPorPagina, totalFilas)}
+                  </strong>{" "}
+                  de <strong>{totalFilas}</strong> empleados
+                </span>
+
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <button
+                    type="button"
+                    className="btn-outline btn-outline--small"
+                    onClick={handlePaginaAnterior}
+                    disabled={pagina === 1}
+                  >
+                    Anterior
+                  </button>
+                  <span className="page__subtitle">
+                    Página {pagina} de {totalPaginas}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-outline btn-outline--small"
+                    onClick={handlePaginaSiguiente}
+                    disabled={pagina === totalPaginas}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Resumen inferior */}

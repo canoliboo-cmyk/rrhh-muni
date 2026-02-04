@@ -67,6 +67,44 @@ router.get("/buscar", async (req, res) => {
     res.status(500).json({ message: "Error al buscar empleados" });
   }
 });
+// Buscar empleado por DPI (para el módulo de permisos)
+router.get("/buscar-por-dpi/:dpi", async (req, res) => {
+  const { dpi } = req.params;
+
+  try {
+    const result = await pool
+      .request()
+      .input("dpi", dpi)
+      .query(`
+        SELECT TOP 1
+          e.id_empleado,
+          e.dpi,
+          CONCAT(e.nombres, ' ', e.apellidos) AS nombreCompleto,
+          dep.nombre AS dependencia
+        FROM Empleados e
+        LEFT JOIN Departamentos dep ON dep.id_departamento = e.id_departamento
+        WHERE e.dpi = @dpi;
+      `);
+
+    if (result.recordset.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No se encontró el empleado con ese DPI." });
+    }
+
+    const row = result.recordset[0];
+
+    res.json({
+      id_empleado: row.id_empleado,
+      dpi: row.dpi,
+      nombreCompleto: row.nombreCompleto,
+      dependencia: row.dependencia,
+    });
+  } catch (error) {
+    console.error("Error al buscar empleado por DPI:", error);
+    res.status(500).json({ message: "Error al buscar empleado por DPI" });
+  }
+});
 
 /* ============================================
    LISTADO DE EMPLEADOS

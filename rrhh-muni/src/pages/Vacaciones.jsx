@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   RiCalendarLine,
   RiTimeLine,
@@ -7,72 +7,12 @@ import {
   RiSearchLine,
 } from "react-icons/ri";
 
-// 🔹 Datos de ejemplo (luego se reemplazan por la base de datos)
-const MOCK_EMPLOYEES = [
-  {
-    codigo: "EMP001",
-    dpi: "3012345670202",
-    nombre: "Juan Carlos Pérez García",
-    diasDisponibles: 15,
-  },
-  {
-    codigo: "EMP002",
-    dpi: "3012345670303",
-    nombre: "María Elena López Ramírez",
-    diasDisponibles: 10,
-  },
-  {
-    codigo: "EMP003",
-    dpi: "3012345670404",
-    nombre: "Carlos Alberto Rodríguez",
-    diasDisponibles: 12,
-  },
-  {
-    codigo: "EMP004",
-    dpi: "3012345670505",
-    nombre: "Ana Sofía Hernández",
-    diasDisponibles: 8,
-  },
-  {
-    codigo: "EMP005",
-    dpi: "3012345670606",
-    nombre: "Luis Fernando Morales",
-    diasDisponibles: 10,
-  },
-  {
-    codigo: "EMP006",
-    dpi: "3012345670707",
-    nombre: "Patricia González Méndez",
-    diasDisponibles: 14,
-  },
-];
-
-const MOCK_VACATIONS = [
-  {
-    id: 1,
-    empleadoDpi: "3012345670202",
-    empleadoNombre: "Juan Carlos Pérez García",
-    fechaInicio: "2026-02-10",
-    fechaFin: "2026-02-21",
-    dias: 10,
-    fechaSolicitud: "2026-01-15",
-    estado: "Aprobado",
-  },
-  {
-    id: 2,
-    empleadoDpi: "3012345670707",
-    empleadoNombre: "Patricia González Méndez",
-    fechaInicio: "2026-03-05",
-    fechaFin: "2026-03-12",
-    dias: 6,
-    fechaSolicitud: "2026-01-18",
-    estado: "Pendiente",
-  },
-];
+const API_URL = "http://localhost:4000/api";
+const FOTOS_URL = "http://localhost:4000/uploads/fotos-empleados";
 
 function Vacaciones() {
-  // Estado de solicitudes
-  const [vacaciones, setVacaciones] = useState(MOCK_VACATIONS);
+  const [vacaciones, setVacaciones] = useState([]);
+  const [diasDisponibles, setDiasDisponibles] = useState([]);
 
   // Filtros de la tabla
   const [search, setSearch] = useState("");
@@ -89,17 +29,69 @@ function Vacaciones() {
     motivo: "",
   });
 
-  // 🔹 Resumen (cards de arriba)
+  // Modal detalle / revisión
+  const [selectedVacacion, setSelectedVacacion] = useState(null);
+
+  /* ===========================
+     Carga inicial
+  ============================ */
+  const loadVacaciones = async () => {
+    try {
+      const resp = await fetch(`${API_URL}/vacaciones`);
+      if (!resp.ok) throw new Error("Error al cargar vacaciones");
+      const data = await resp.json();
+      setVacaciones(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Error al cargar vacaciones");
+    }
+  };
+
+  const loadDiasDisponibles = async () => {
+    try {
+      const anio = new Date().getFullYear();
+      const resp = await fetch(
+        `${API_URL}/vacaciones/dias-disponibles?anio=${anio}`
+      );
+      if (!resp.ok) throw new Error("Error al cargar días disponibles");
+      const data = await resp.json();
+      setDiasDisponibles(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Error al cargar días disponibles");
+    }
+  };
+
+  useEffect(() => {
+    const load = async () => {
+      await loadVacaciones();
+      await loadDiasDisponibles();
+    };
+    load();
+  }, []);
+
+  /* ===========================
+     Resumen (cards de arriba)
+  ============================ */
   const resumen = useMemo(() => {
     const total = vacaciones.length;
-    const pendientes = vacaciones.filter((v) => v.estado === "Pendiente").length;
-    const aprobadas = vacaciones.filter((v) => v.estado === "Aprobado").length;
-    const diasTotales = vacaciones.reduce((acc, v) => acc + v.dias, 0);
+    const pendientes = vacaciones.filter(
+      (v) => v.estado === "Pendiente"
+    ).length;
+    const aprobadas = vacaciones.filter(
+      (v) => v.estado === "Aprobado"
+    ).length;
+    const diasTotales = vacaciones.reduce(
+      (acc, v) => acc + (Number(v.dias) || 0),
+      0
+    );
 
     return { total, pendientes, aprobadas, diasTotales };
   }, [vacaciones]);
 
-  // 🔹 Filtro de tabla por texto / estado
+  /* ===========================
+     Filtros de tabla
+  ============================ */
   const vacacionesFiltradas = vacaciones.filter((v) => {
     const term = search.toLowerCase();
 
@@ -109,23 +101,47 @@ function Vacaciones() {
       v.empleadoDpi.includes(term);
 
     const matchEstado =
-      filterEstado === "todos" || v.estado.toLowerCase() === filterEstado;
+      filterEstado === "todos" ||
+      (v.estado && v.estado.toLowerCase() === filterEstado);
 
     return matchSearch && matchEstado;
   });
 
-  // 🔹 Lista de "días disponibles" por empleado (mock)
-  const diasDisponibles = MOCK_EMPLOYEES;
+  /* ===========================
+     Nueva solicitud
+  ============================ */
 
-  // --- Lógica modal nueva solicitud ---
+  const handleBuscarEmpleadoPorDpi = async () => {
+    const dpi = dpiBusqueda.trim();
+    if (!dpi) {
+      alert("Ingresa un DPI para buscar.");
+      return;
+    }
 
-  const handleBuscarEmpleadoPorDpi = () => {
-    // Aquí más adelante vas a llamar a tu backend para buscar por DPI
-    const emp = MOCK_EMPLOYEES.find((e) => e.dpi === dpiBusqueda.trim());
-    setEmpleadoSeleccionado(emp || null);
+    try {
+      const resp = await fetch(
+        `${API_URL}/empleados/buscar-por-dpi/${dpi}`
+      );
+      if (!resp.ok) {
+        if (resp.status === 404) {
+          alert("No se encontró un empleado con ese DPI.");
+        } else {
+          alert("Error al buscar empleado.");
+        }
+        setEmpleadoSeleccionado(null);
+        return;
+      }
 
-    if (!emp) {
-      alert("No se encontró un empleado con ese DPI (datos de prueba).");
+      const emp = await resp.json();
+      setEmpleadoSeleccionado({
+        codigo: emp.id_empleado,
+        dpi: emp.dpi,
+        nombre: `${emp.nombres} ${emp.apellidos}`,
+        diasDisponibles: emp.diasDisponibles ?? 15, // si luego lo calculas en BD lo ajustamos
+      });
+    } catch (error) {
+      console.error(error);
+      alert("Error de conexión al buscar empleado.");
     }
   };
 
@@ -157,7 +173,7 @@ function Vacaciones() {
     }));
   };
 
-  const handleSubmitNueva = (e) => {
+  const handleSubmitNueva = async (e) => {
     e.preventDefault();
 
     if (!empleadoSeleccionado) {
@@ -165,31 +181,101 @@ function Vacaciones() {
       return;
     }
 
-    const nueva = {
-      id: Date.now(),
-      empleadoDpi: empleadoSeleccionado.dpi,
-      empleadoNombre: empleadoSeleccionado.nombre,
-      fechaInicio: formNueva.fechaInicio,
-      fechaFin: formNueva.fechaFin,
-      dias: Number(formNueva.dias) || 0,
-      fechaSolicitud: new Date().toISOString().slice(0, 10),
-      estado: "Pendiente",
-    };
+    try {
+      const payload = {
+        dpi: empleadoSeleccionado.dpi,
+        fechaInicio: formNueva.fechaInicio,
+        fechaFin: formNueva.fechaFin,
+        dias: Number(formNueva.dias) || undefined,
+        motivo: formNueva.motivo,
+      };
 
-    // Aquí luego se enviará al backend
-    setVacaciones((prev) => [...prev, nueva]);
+      const resp = await fetch(`${API_URL}/vacaciones`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    // Reset
-    setIsModalOpen(false);
-    setDpiBusqueda("");
-    setEmpleadoSeleccionado(null);
-    setFormNueva({
-      fechaInicio: "",
-      fechaFin: "",
-      dias: "",
-      motivo: "",
-    });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || "Error al crear vacaciones");
+      }
+
+      // ⚡ Recargar listas desde el backend (sin F5)
+      await loadVacaciones();
+      await loadDiasDisponibles();
+
+      // Reset modal
+      setIsModalOpen(false);
+      setDpiBusqueda("");
+      setEmpleadoSeleccionado(null);
+      setFormNueva({
+        fechaInicio: "",
+        fechaFin: "",
+        dias: "",
+        motivo: "",
+      });
+
+      alert("Solicitud de vacaciones creada correctamente.");
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Error al crear vacaciones");
+    }
   };
+
+  /* ===========================
+     Revisión / detalle
+  ============================ */
+
+  const handleOpenDetalle = (vacacion) => {
+    setSelectedVacacion({ ...vacacion });
+  };
+
+  const handleCloseDetalle = () => setSelectedVacacion(null);
+
+  const handleChangeDetalle = (e) => {
+    const { name, value } = e.target;
+    setSelectedVacacion((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleGuardarDetalle = async () => {
+    if (!selectedVacacion) return;
+
+    try {
+      const resp = await fetch(
+        `${API_URL}/vacaciones/${selectedVacacion.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ estado: selectedVacacion.estado }),
+        }
+      );
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || "Error al actualizar vacación");
+      }
+
+      // Actualizar estado local
+      setVacaciones((prev) =>
+        prev.map((v) =>
+          v.id === selectedVacacion.id
+            ? { ...v, estado: selectedVacacion.estado }
+            : v
+        )
+      );
+
+      alert("Cambios guardados correctamente.");
+      handleCloseDetalle();
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Error al actualizar vacación");
+    }
+  };
+
+  /* ===========================
+     Render
+  ============================ */
 
   return (
     <div className="page">
@@ -217,7 +303,9 @@ function Vacaciones() {
           <div className="vacaciones-summary__icon vacaciones-summary__icon--blue">
             <RiCalendarLine />
           </div>
-          <p className="vacaciones-summary__label">Solicitudes Totales</p>
+          <p className="vacaciones-summary__label">
+            Solicitudes Totales
+          </p>
           <p className="vacaciones-summary__value">{resumen.total}</p>
         </div>
 
@@ -226,7 +314,9 @@ function Vacaciones() {
             <RiTimeLine />
           </div>
           <p className="vacaciones-summary__label">Pendientes</p>
-          <p className="vacaciones-summary__value">{resumen.pendientes}</p>
+          <p className="vacaciones-summary__value">
+            {resumen.pendientes}
+          </p>
         </div>
 
         <div className="vacaciones-summary__card">
@@ -234,7 +324,9 @@ function Vacaciones() {
             <RiCheckLine />
           </div>
           <p className="vacaciones-summary__label">Aprobadas</p>
-          <p className="vacaciones-summary__value">{resumen.aprobadas}</p>
+          <p className="vacaciones-summary__value">
+            {resumen.aprobadas}
+          </p>
         </div>
 
         <div className="vacaciones-summary__card">
@@ -242,7 +334,9 @@ function Vacaciones() {
             <RiSuitcaseLine />
           </div>
           <p className="vacaciones-summary__label">Días Totales</p>
-          <p className="vacaciones-summary__value">{resumen.diasTotales}</p>
+          <p className="vacaciones-summary__value">
+            {resumen.diasTotales}
+          </p>
         </div>
       </div>
 
@@ -292,12 +386,22 @@ function Vacaciones() {
               <tr key={v.id}>
                 <td>
                   <div className="vacaciones-table__employee">
-                    <span className="vacaciones-table__employee-name">
-                      {v.empleadoNombre}
-                    </span>
-                    <span className="vacaciones-table__employee-dpi">
-                      {v.empleadoDpi}
-                    </span>
+                    {/* FOTO DEL EMPLEADO */}
+                    {v.fotoEmpleado && (
+                      <img
+                        src={`${FOTOS_URL}/${v.fotoEmpleado}`}
+                        alt={v.empleadoNombre}
+                        className="vacaciones-table__employee-photo"
+                      />
+                    )}
+                    <div>
+                      <span className="vacaciones-table__employee-name">
+                        {v.empleadoNombre}
+                      </span>
+                      <span className="vacaciones-table__employee-dpi">
+                        {v.empleadoDpi}
+                      </span>
+                    </div>
                   </div>
                 </td>
                 <td>{v.fechaInicio}</td>
@@ -322,7 +426,11 @@ function Vacaciones() {
                   )}
                 </td>
                 <td style={{ textAlign: "right" }}>
-                  <button type="button" className="btn-ghost btn-ghost--sm">
+                  <button
+                    type="button"
+                    className="btn-ghost btn-ghost--sm"
+                    onClick={() => handleOpenDetalle(v)}
+                  >
                     Ver Detalle
                   </button>
                 </td>
@@ -331,8 +439,12 @@ function Vacaciones() {
 
             {vacacionesFiltradas.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", padding: "1rem" }}>
-                  No se encontraron solicitudes con los filtros actuales.
+                <td
+                  colSpan={7}
+                  style={{ textAlign: "center", padding: "1rem" }}
+                >
+                  No se encontraron solicitudes con los filtros
+                  actuales.
                 </td>
               </tr>
             )}
@@ -350,7 +462,7 @@ function Vacaciones() {
           {diasDisponibles.map((emp) => (
             <div key={emp.codigo} className="vacaciones-days-card__item">
               <p className="vacaciones-days-card__name">{emp.nombre}</p>
-              <p className="vacaciones-days-card__code">{emp.codigo}</p>
+              <p className="vacaciones-days-card__code">{emp.dpi}</p>
               <span className="vacaciones-days-card__badge">
                 {emp.diasDisponibles} días
               </span>
@@ -363,9 +475,7 @@ function Vacaciones() {
       {isModalOpen && (
         <div
           className="modal-backdrop"
-          onClick={() => {
-            setIsModalOpen(false);
-          }}
+          onClick={() => setIsModalOpen(false)}
         >
           <div
             className="modal modal--large"
@@ -382,7 +492,10 @@ function Vacaciones() {
               </button>
             </div>
 
-            <form className="modal__body vacaciones-form" onSubmit={handleSubmitNueva}>
+            <form
+              className="modal__body vacaciones-form"
+              onSubmit={handleSubmitNueva}
+            >
               {/* Búsqueda de empleado por DPI */}
               <div className="section-card section-card--borderless">
                 <h4 className="section-card__title">Datos del empleado</h4>
@@ -407,8 +520,8 @@ function Vacaciones() {
                       </button>
                     </div>
                     <p className="form-help">
-                      El sistema buscará al empleado en la base de datos usando
-                      el DPI.
+                      El sistema buscará al empleado en la base de datos
+                      usando el DPI.
                     </p>
                   </div>
 
@@ -434,7 +547,9 @@ function Vacaciones() {
 
               {/* Datos de la solicitud */}
               <div className="section-card section-card--borderless">
-                <h4 className="section-card__title">Detalle de la solicitud</h4>
+                <h4 className="section-card__title">
+                  Detalle de la solicitud
+                </h4>
 
                 <div className="form-grid-two">
                   <div className="form-group">
@@ -484,7 +599,7 @@ function Vacaciones() {
                       name="motivo"
                       value={formNueva.motivo}
                       onChange={handleChangeNueva}
-                      placeholder="Descríbe brevemente el motivo de las vacaciones..."
+                      placeholder="Describe brevemente el motivo de las vacaciones..."
                     />
                   </div>
                 </div>
@@ -498,11 +613,128 @@ function Vacaciones() {
                 >
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary btn-primary--sm">
+                <button
+                  type="submit"
+                  className="btn-primary btn-primary--sm"
+                >
                   Guardar solicitud
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal DETALLE / revisión */}
+      {selectedVacacion && (
+        <div
+          className="modal-backdrop"
+          onClick={handleCloseDetalle}
+        >
+          <div
+            className="modal modal--large"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal__header">
+              <h3>Revisión de Vacación</h3>
+              <button
+                type="button"
+                className="icon-button icon-button--ghost"
+                onClick={handleCloseDetalle}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal__body vacaciones-form">
+              <div className="section-card section-card--borderless">
+                <h4 className="section-card__title">Datos del empleado</h4>
+                <div className="vacaciones-form__employee-info">
+                  {selectedVacacion.fotoEmpleado && (
+                    <img
+                      src={`${FOTOS_URL}/${selectedVacacion.fotoEmpleado}`}
+                      alt={selectedVacacion.empleadoNombre}
+                      className="vacaciones-detail__photo"
+                    />
+                  )}
+                  <div>
+                    <p className="vacaciones-form__employee-name">
+                      {selectedVacacion.empleadoNombre}
+                    </p>
+                    <p className="vacaciones-form__employee-detail">
+                      DPI: {selectedVacacion.empleadoDpi}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="section-card section-card--borderless">
+                <h4 className="section-card__title">
+                  Detalle de la solicitud
+                </h4>
+
+                <div className="form-grid-two">
+                  <div className="form-group">
+                    <label className="form-label">Fecha inicio</label>
+                    <p className="modal-value">
+                      {selectedVacacion.fechaInicio}
+                    </p>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Fecha fin</label>
+                    <p className="modal-value">
+                      {selectedVacacion.fechaFin}
+                    </p>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Días</label>
+                    <p className="modal-value">{selectedVacacion.dias}</p>
+                  </div>
+                  <div className="form-group form-group--full">
+                    <label className="form-label">Motivo</label>
+                    <p className="modal-value">
+                      {selectedVacacion.motivo || "—"}
+                    </p>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Fecha solicitud</label>
+                    <p className="modal-value">
+                      {selectedVacacion.fechaSolicitud}
+                    </p>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Estado</label>
+                    <select
+                      name="estado"
+                      className="form-input"
+                      value={selectedVacacion.estado}
+                      onChange={handleChangeDetalle}
+                    >
+                      <option value="Pendiente">Pendiente</option>
+                      <option value="Aprobado">Aprobado</option>
+                      <option value="Rechazado">Rechazado</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal__footer">
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={handleCloseDetalle}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleGuardarDetalle}
+              >
+                Guardar cambios
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 // src/pages/Permisos.jsx
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   RiCalendarLine,
   RiTimeLine,
@@ -9,72 +9,12 @@ import {
   RiUpload2Line,
 } from "react-icons/ri";
 
-/**
- * Empleados de ejemplo.
- * Más adelante esto vendrá del backend (tabla empleados).
- */
-const MOCK_EMPLEADOS = [
-  {
-    dpi: "3012345670202",
-    nombreCompleto: "Yeferson Alexander Castillo Hernández",
-    dependencia: "Recursos Humanos",
-  },
-  {
-    dpi: "3012345670303",
-    nombreCompleto: "María Elena López Ramírez",
-    dependencia: "Tesorería",
-  },
-  {
-    dpi: "3012345670404",
-    nombreCompleto: "Luis Fernando Morales",
-    dependencia: "Servicios Públicos",
-  },
-];
-
-const MOCK_PERMISOS = [
-  {
-    id: 1,
-    dpi: "3012345670303",
-    empleado: "María Elena López Ramírez",
-    dependencia: "Tesorería",
-    tipo: "Personal",
-    fechaInicio: "2026-01-22",
-    fechaFin: "2026-01-22",
-    motivo: "Cita médica",
-    fechaSolicitud: "2026-01-18",
-    estado: "Pendiente",
-    archivoFirmadoNombre: null,
-  },
-  {
-    id: 2,
-    dpi: "3012345670404",
-    empleado: "Luis Fernando Morales",
-    dependencia: "Servicios Públicos",
-    tipo: "Enfermedad",
-    fechaInicio: "2026-01-15",
-    fechaFin: "2026-01-17",
-    motivo: "Incapacidad médica por gripe",
-    fechaSolicitud: "2026-01-14",
-    estado: "Aprobado",
-    archivoFirmadoNombre: "permiso_luis_20260115.pdf",
-  },
-  {
-    id: 3,
-    dpi: "3012345670303",
-    empleado: "María Elena López Ramírez",
-    dependencia: "Tesorería",
-    tipo: "Personal",
-    fechaInicio: "2026-01-20",
-    fechaFin: "2026-01-20",
-    motivo: "Trámite personal",
-    fechaSolicitud: "2026-01-17",
-    estado: "Rechazado",
-    archivoFirmadoNombre: null,
-  },
-];
+const API_URL = "http://localhost:4000/api";
+const PERMISOS_FILES_URL = "http://localhost:4000/permisos";
+const LOGO_URL = "http://localhost:4000/logos/logoprincipal.png";
 
 function Permisos() {
-  const [permisos, setPermisos] = useState(MOCK_PERMISOS);
+  const [permisos, setPermisos] = useState([]);
 
   // Vista modal nuevo
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -84,6 +24,7 @@ function Permisos() {
 
   // Formulario nuevo permiso
   const [formNuevo, setFormNuevo] = useState({
+    id_empleado: null,
     dpi: "",
     empleado: "",
     dependencia: "",
@@ -98,7 +39,52 @@ function Permisos() {
   const [filterFechaDesde, setFilterFechaDesde] = useState("");
   const [filterFechaHasta, setFilterFechaHasta] = useState("");
 
-  // Resumen (sobre todos los permisos, no filtrados)
+  // =============================
+  // Carga inicial de permisos
+  // =============================
+const loadPermisos = useCallback(async () => {
+  try {
+    const resp = await fetch(`${API_URL}/permisos`);
+    if (!resp.ok) throw new Error("Error al cargar permisos");
+
+    const data = await resp.json();
+
+    const toDate = (value) =>
+      value ? String(value).slice(0, 10) : "";
+
+    const adaptados = (Array.isArray(data) ? data : []).map((p) => {
+      const nombreEmpleado =
+        p.nombre_empleado || p.empleado || p.nombreCompleto || "";
+
+      return {
+        id: p.id_permiso || p.id,
+        dpi: p.dpi,
+        empleado: nombreEmpleado,
+        dependencia: p.dependencia,
+        tipo: p.tipo,
+        fechaInicio: toDate(p.fecha_inicio || p.fechaInicio),
+        fechaFin: toDate(p.fecha_fin || p.fechaFin),
+        motivo: p.motivo,
+        fechaSolicitud: toDate(
+          p.fecha_solicitud || p.fechaSolicitud
+        ),
+        estado: p.estado || "Pendiente",
+        archivoFirmadoNombre: p.archivo_firmado || p.archivoFirmadoNombre || null,
+      };
+    });
+
+    setPermisos(adaptados);
+  } catch (error) {
+    console.error(error);
+    alert("Error al cargar permisos");
+  }
+}, []);
+
+  useEffect(() => {
+    loadPermisos();
+  }, [loadPermisos]);
+
+  // Resumen (sobre todos los permisos)
   const total = permisos.length;
   const pendientes = permisos.filter((p) => p.estado === "Pendiente").length;
   const aprobadas = permisos.filter((p) => p.estado === "Aprobado").length;
@@ -110,11 +96,9 @@ function Permisos() {
 
   const permisosFiltrados = permisos.filter((p) => {
     const termDpi = filterDpi.trim();
-    const matchDpi =
-      !termDpi || (p.dpi && p.dpi.includes(termDpi));
+    const matchDpi = !termDpi || (p.dpi && p.dpi.includes(termDpi));
 
-    // Usamos fechaInicio para el filtro por fechas
-    const baseDate = p.fechaInicio;
+    const baseDate = p.fechaInicio; // usamos fechaInicio para filtrar
 
     const matchDesde =
       !filterFechaDesde || baseDate >= filterFechaDesde;
@@ -139,10 +123,11 @@ function Permisos() {
   const handleCloseCreate = () => {
     setIsCreateOpen(false);
     setFormNuevo({
+      id_empleado: null,
       dpi: "",
       empleado: "",
       dependencia: "",
-      tipo: "Personal",
+      tipo: "",
       fechaInicio: "",
       fechaFin: "",
       motivo: "",
@@ -154,69 +139,85 @@ function Permisos() {
     setFormNuevo((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleBuscarEmpleadoPorDpi = () => {
+  const handleBuscarEmpleadoPorDpi = async () => {
     const dpiBuscado = formNuevo.dpi.trim();
     if (!dpiBuscado) {
       alert("Ingrese un DPI para buscar.");
       return;
     }
 
-    // Más adelante esto será una llamada al backend.
-    const empleado = MOCK_EMPLEADOS.find(
-      (emp) => emp.dpi === dpiBuscado
-    );
-
-    if (!empleado) {
-      alert(
-        "No se encontró ningún empleado con ese DPI en la base de datos."
+    try {
+      const resp = await fetch(
+        `${API_URL}/empleados/buscar-por-dpi/${dpiBuscado}`
       );
+      if (!resp.ok) {
+        if (resp.status === 404) {
+          alert("No se encontró ningún empleado con ese DPI.");
+        } else {
+          alert("Error al buscar empleado por DPI.");
+        }
+        setFormNuevo((prev) => ({
+          ...prev,
+          id_empleado: null,
+          empleado: "",
+          dependencia: "",
+        }));
+        return;
+      }
+
+      const empleado = await resp.json();
+
       setFormNuevo((prev) => ({
         ...prev,
-        empleado: "",
-        dependencia: "",
+        id_empleado: empleado.id_empleado,
+        dpi: empleado.dpi,
+        empleado: empleado.nombreCompleto,
+        dependencia: empleado.dependencia || "",
       }));
-      return;
+    } catch (error) {
+      console.error(error);
+      alert("Error de conexión al buscar el empleado.");
     }
-
-    setFormNuevo((prev) => ({
-      ...prev,
-      empleado: empleado.nombreCompleto,
-      dependencia: empleado.dependencia,
-    }));
   };
 
-  const handleSubmitNuevo = (e) => {
+  const handleSubmitNuevo = async (e) => {
     e.preventDefault();
 
-    if (!formNuevo.dpi || !formNuevo.empleado) {
-      alert(
-        "Debe seleccionar un empleado válido (buscar por DPI) antes de guardar el permiso."
-      );
+    if (
+      !formNuevo.dpi.trim() ||
+      !formNuevo.tipo.trim() ||
+      !formNuevo.fechaInicio ||
+      !formNuevo.motivo.trim()
+    ) {
+      alert("Faltan datos obligatorios (dpi, tipo, fechaInicio, motivo).");
       return;
     }
 
-    const hoy = new Date();
-    const fechaSolicitud = hoy.toISOString().slice(0, 10);
+    try {
+      const resp = await fetch(`${API_URL}/permisos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dpi: formNuevo.dpi,
+          tipo: formNuevo.tipo,
+          fechaInicio: formNuevo.fechaInicio,
+          fechaFin: formNuevo.fechaFin || formNuevo.fechaInicio,
+          motivo: formNuevo.motivo,
+        }),
+      });
 
-    const nuevoPermiso = {
-      id: Date.now(),
-      dpi: formNuevo.dpi,
-      empleado: formNuevo.empleado,
-      dependencia: formNuevo.dependencia,
-      tipo: formNuevo.tipo,
-      fechaInicio: formNuevo.fechaInicio,
-      fechaFin: formNuevo.fechaFin || formNuevo.fechaInicio,
-      motivo: formNuevo.motivo,
-      fechaSolicitud,
-      estado: "Pendiente",
-      archivoFirmadoNombre: null,
-    };
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || "Error al crear permiso");
+      }
 
-    setPermisos((prev) => [nuevoPermiso, ...prev]);
-    alert(
-      "Permiso registrado en estado PENDIENTE (solo UI, la conexión al backend se hará después)."
-    );
-    handleCloseCreate();
+      await loadPermisos(); // 🔄 refresca lista desde BD
+      handleCloseCreate();
+      alert("Permiso registrado correctamente.");
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Error al crear permiso.");
+    }
   };
 
   /* =====================
@@ -234,32 +235,247 @@ function Permisos() {
     setSelectedPermiso((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleUploadFirmado = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setSelectedPermiso((prev) => ({
-      ...prev,
-      archivoFirmadoNombre: file.name,
-    }));
-  };
-
-  const handleGuardarDetalle = () => {
+  const handleGuardarDetalle = async () => {
     if (!selectedPermiso) return;
 
-    setPermisos((prev) =>
-      prev.map((p) =>
-        p.id === selectedPermiso.id ? { ...selectedPermiso } : p
-      )
-    );
+    try {
+      const resp = await fetch(
+        `${API_URL}/permisos/${selectedPermiso.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            estado: selectedPermiso.estado,
+          }),
+        }
+      );
 
-    alert("Cambios guardados (solo UI, falta conectar al backend).");
-    handleCloseDetalle();
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || "Error al actualizar permiso");
+      }
+
+      setPermisos((prev) =>
+        prev.map((p) =>
+          p.id === selectedPermiso.id
+            ? {
+                ...p,
+                estado: selectedPermiso.estado,
+                archivoFirmadoNombre:
+                  selectedPermiso.archivoFirmadoNombre ?? p.archivoFirmadoNombre,
+              }
+            : p
+        )
+      );
+
+      alert("Cambios guardados correctamente.");
+      handleCloseDetalle();
+    } catch (error) {
+      console.error("Error al actualizar permiso:", error);
+      alert(error.message || "Error al actualizar permiso.");
+    }
   };
+
+  const handleUploadFirmado = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedPermiso) return;
+
+    try {
+      const formData = new FormData();
+      formData.append("archivo", file);
+      formData.append("dpi", selectedPermiso.dpi);
+
+      const resp = await fetch(
+        `${API_URL}/permisos/${selectedPermiso.id}/upload`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || "Error al subir archivo.");
+      }
+
+     const data = await resp.json();
+console.log("DEBUG upload respuesta backend:", data);
+
+// Intentamos varias posibles propiedades que pueda devolver el backend
+const nombreArchivo =
+  data.archivoFirmadoNombre ??
+  data.archivo_firmado ??
+  data.filename ??
+  data.fileName ??
+  data.archivo ??
+  data.file;
+
+// Si AÚN así no viene nada, no rompemos la UI, solo avisamos
+if (!nombreArchivo) {
+  console.warn(
+    "La respuesta del servidor no trae nombre de archivo. Respuesta:",
+    data
+  );
+  alert(
+    "El archivo se subió, pero el servidor no devolvió el nombre. Revisa la ruta POST /permisos/:id/upload."
+  );
+  return;
+}
+
+// ✅ Actualizamos el permiso en el modal
+setSelectedPermiso((prev) =>
+  prev
+    ? {
+        ...prev,
+        archivoFirmadoNombre: nombreArchivo,
+      }
+    : prev
+);
+
+// ✅ Y en la tabla
+setPermisos((prev) =>
+  prev.map((p) =>
+    p.id === selectedPermiso.id
+      ? { ...p, archivoFirmadoNombre: nombreArchivo }
+      : p
+  )
+);
+
+alert("Archivo firmado subido correctamente.");
+
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Error al subir el archivo firmado.");
+    }
+  };
+
+  /* =====================
+     Imprimir constancia
+     ===================== */
 
   const handleImprimirConstancia = () => {
-    window.print();
+    if (!selectedPermiso) return;
+
+    const w = window.open("", "_blank", "width=900,height=700");
+    if (!w) {
+      alert("El navegador bloqueó la ventana de impresión.");
+      return;
+    }
+
+    const p = selectedPermiso;
+
+    w.document.write(`
+      <html>
+        <head>
+          <title>Constancia de permiso</title>
+          <style>
+            @page {
+              size: letter;
+              margin: 2.5cm;
+            }
+            body {
+              font-family: Arial, sans-serif;
+              color: #111827;
+              font-size: 13px;
+              line-height: 1.6;
+            }
+            .header {
+              display: flex;
+              align-items: center;
+              margin-bottom: 24px;
+            }
+            .logo {
+              margin-right: 16px;
+            }
+            .logo img {
+              height: 80px;
+            }
+            .title h1 {
+              margin: 0;
+              font-size: 18px;
+              text-transform: uppercase;
+            }
+            .title h2 {
+              margin: 4px 0 0;
+              font-size: 14px;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+            }
+            .content p {
+              text-align: justify;
+            }
+            .meta {
+              margin-top: 12px;
+              font-size: 12px;
+              color: #4b5563;
+            }
+            .firmas {
+              margin-top: 60px;
+              display: flex;
+              justify-content: space-between;
+            }
+            .firmas .col {
+              width: 45%;
+              text-align: center;
+            }
+            .line {
+              border-top: 1px solid #111827;
+              margin-bottom: 4px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="logo">
+              <img src="${LOGO_URL}" alt="Logo Municipalidad" />
+            </div>
+            <div class="title">
+              <h1>Municipalidad de San José Acatempa</h1>
+              <h1>¡No Paramos de Trabajar!</h1>
+              <h2>Constancia de Permiso</h2>
+            </div>
+          </div>
+
+          <div class="content">
+            <p>
+              Se hace constar que el/la colaborador(a) <strong>${p.empleado}</strong>,
+              con DPI <strong>${p.dpi}</strong>, adscrito(a) a la dependencia de
+              <strong> ${p.dependencia}</strong>, solicitó un permiso de tipo
+              <strong> ${p.tipo}</strong> del día <strong>${p.fechaInicio}</strong>
+              al <strong>${p.fechaFin}</strong>, por el motivo:
+              <strong> ${p.motivo}</strong>.
+            </p>
+            <p>
+              Para los efectos legales y administrativos que al interesado convengan,
+              se extiende la presente en la fecha de su emisión.
+            </p>
+            <p class="meta">
+              Fecha de solicitud: ${p.fechaSolicitud}
+            </p>
+          </div>
+
+          <div class="firmas">
+            <div class="col">
+              <div class="line"></div>
+              <div>Firma del Empleado</div>
+            </div>
+            <div class="col">
+              <div class="line"></div>
+              <div>Vo. Bo. Jefe Inmediato</div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    w.document.close();
+    w.focus();
+    w.print();
   };
+
+  /* =====================
+     Render
+     ===================== */
 
   return (
     <div className="page">
@@ -729,7 +945,7 @@ function Permisos() {
                   Constancia y respaldo
                 </h4>
 
-                {/* Vista previa de constancia */}
+                {/* Vista previa de constancia simple */}
                 <div className="constancia-preview">
                   <div className="constancia-preview__header">
                     <div className="constancia-preview__logo">
@@ -811,7 +1027,13 @@ function Permisos() {
                       <p className="file-input-current">
                         Archivo cargado:{" "}
                         <strong>
-                          {selectedPermiso.archivoFirmadoNombre}
+                          <a
+                            href={`${PERMISOS_FILES_URL}/${selectedPermiso.archivoFirmadoNombre}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {selectedPermiso.archivoFirmadoNombre}
+                          </a>
                         </strong>
                       </p>
                     )}

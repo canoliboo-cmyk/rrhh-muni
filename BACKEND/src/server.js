@@ -14,9 +14,12 @@ const empleadosRoutes = require("./routes/empleados.routes");
 const departamentosRoutes = require("./routes/departamentos.routes");
 const puestosRoutes = require("./routes/puestos.routes");
 const planillasRoutes = require("./routes/planillas.routes"); // 👈 OJO: routes/planillas.routes
-
+const permisosRoutes = require("./routes/permisos.routes");
+const permisosDir = path.join(__dirname, "permisos");
+const vacacionesRoutes = require("./routes/vacaciones.routes");
 const app = express();
 const PORT = process.env.PORT || 4000;
+
 
 // Middlewares
 app.use(cors());
@@ -42,6 +45,17 @@ app.use(
   "/uploads/dpi-empleados",
   express.static(path.join(__dirname, "..", "dpiempleados"))
 );
+// Archivos firmados de permisos
+app.use(
+  "/permisos",
+  express.static(path.join(__dirname, "..", "permisos"))
+);
+
+// Logo municipalidad
+app.use(
+  "/logos",
+  express.static(path.join(__dirname, "..", "logos"))
+);
 
 // Rutas API
 app.use("/api/renglones", renglonesRoutes);
@@ -51,6 +65,11 @@ app.use("/api/empleados", empleadosRoutes);
 app.use("/api/departamentos", departamentosRoutes);
 app.use("/api/puestos", puestosRoutes);
 app.use("/api/planillas", planillasRoutes); // 👈 usa planillasRoutes, igual que arriba
+app.use("/api/permisos", permisosRoutes);
+app.use("/permisos", express.static(permisosDir));
+app.use("/permisos", express.static(path.join(__dirname,"permisos")));
+app.use("/api/vacaciones", vacacionesRoutes);
+
 
 // Arrancar servidor cuando el pool esté listo
 poolConnect.then(() => {
